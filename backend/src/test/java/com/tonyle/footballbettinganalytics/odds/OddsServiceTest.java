@@ -54,6 +54,23 @@ class OddsServiceTest {
         assertEquals(List.of("Unibet (SE)", "LeoVegas (SE)", "Svenska Spel", "ATG (SE)"), OddsService.map(event, 100).prices().stream().map(OddsService.Price::bookmaker).toList());
     }
 
+    @Test void diagnosticsDistinguishReturnedGoalLinesFromAcceptedPricesAndAbsentMarkets() {
+        var event = new OddsService.Event(ID, "soccer_epl", "2099-01-01T15:00:00Z", "Home", "Away", List.of(
+                new OddsService.Bookmaker("svenskaspel_se", "Svenska Spel", null, List.of(
+                        new OddsService.Market("totals", null, List.of(new OddsService.Outcome("Over", 1.9, 3.5), new OddsService.Outcome("Under", 1.9, 3.5)))))));
+        var result = OddsService.map(event, 100);
+        assertTrue(result.prices().isEmpty());
+        var diagnostic = result.diagnostics().getFirst();
+        assertEquals("svenskaspel_se", diagnostic.key());
+        assertEquals(1, diagnostic.markets().size());
+        assertEquals("totals", diagnostic.markets().getFirst().market());
+        assertEquals(List.of(3.5), diagnostic.markets().getFirst().goalLines());
+        assertEquals(2, diagnostic.markets().getFirst().returnedOutcomes());
+        assertEquals(0, diagnostic.markets().getFirst().acceptedPrices());
+        // No BTTS entry means it was absent in this response, not absent on the bookmaker's site.
+        assertTrue(diagnostic.markets().stream().noneMatch(m -> "btts".equals(m.market())));
+    }
+
     @Test void missingKeyAndInvalidInputsFailWithoutProviderCalls() {
         var service = new OddsService(RestClient.create(), "");
         assertEquals(503, assertThrows(FootballDataException.class, () -> service.events("PL")).status().value());

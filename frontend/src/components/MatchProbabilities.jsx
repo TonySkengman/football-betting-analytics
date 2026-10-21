@@ -4,6 +4,7 @@ import BookmakerSelector from './BookmakerSelector';
 import { quoteFor } from '../services/bookmakerOdds';
 import { SectionHeading } from './Ui';
 import OutcomeCard from './OutcomeCard';
+import OutcomeOverview from './OutcomeOverview';
 import AnalysisSection from './AnalysisSection';
 
 function Market({ title, outcomes, market, resource, bookmaker }) {
@@ -43,6 +44,7 @@ export default function MatchProbabilities({ performance, matchId }) {
       ) : (
         <>
           <BookmakerSelector resource={resource} selected={bookmaker} onSelect={setBookmaker} upcoming={Date.parse(performance.cutoff) > Date.now()} />
+          <OutcomeOverview performance={performance} resource={resource} bookmaker={bookmaker} />
           <div className="grid lg:grid-cols-3 gap-4">
             <Market market="h2h" resource={resource} bookmaker={bookmaker} title="Match result · 1X2" outcomes={[[`${performance.home.team.name} win`, estimate.probabilities.homeWin, resource.data?.fixture.home], ['Draw', estimate.probabilities.draw, 'Draw'], [`${performance.away.team.name} win`, estimate.probabilities.awayWin, resource.data?.fixture.away]]} />
             <Market market="totals" resource={resource} bookmaker={bookmaker} title="Total goals · 2.5" outcomes={[[ 'Over 2.5', estimate.probabilities.over25, 'Over'], ['Under 2.5', estimate.probabilities.under25, 'Under']]} />

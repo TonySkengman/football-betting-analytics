@@ -667,3 +667,58 @@ unavailable with manual entry as a fallback. Restart the backend and reload odds
 to clear the old cached response.
 
 Official coverage: https://the-odds-api.com/sports-odds-data/bookmaker-apis.html#se-bookmakers
+
+## Outcome overview
+
+Match details now show **Most likely**, sorted by the unrounded experimental
+probabilities, and **Potential value**, sorted by positive expected return for
+the selected bookmaker. Both use existing responses and comparison helpers;
+there are no additional API calls. Loading odds and choosing a bookmaker remain
+explicit actions. Manual odds comparisons stay in the individual outcome cards.
+
+Missing/invalid probabilities are excluded while genuine zeros are preserved.
+Value rankings require an exact bookmaker/market/outcome match and a fresh source
+quote; stale, future-dated, missing or invalid prices cannot enter the list.
+A local timer removes aging quotes without polling the server. Empty comparisons,
+loading and errors have explanatory messages. Quotes display their source update
+time. Markets overlap, so the lists are not independent picks or a combined bet.
+Positive expected return depends on model accuracy and is not a recommendation.
+
+Verification for this frontend change: all 31 frontend tests and production build
+passed. No backend changes were required; live browser verification was not run.
+
+
+### Value ranking within a match
+
+The overview ranks bet types for the selected match using only the selected
+bookmaker's prices. The bet name and estimated expected-return percentage are
+prominent; probability, odds, fair odds and update time are supporting details.
+It never chooses another bookmaker's price or compares bookmakers. Changing the
+selector recalculates the ranking locally without API calls. No selection,
+missing/stale prices, or no positive expected returns produce explanatory empty
+states. Manual comparisons remain in the individual cards. These are experimental
+model estimates, not guarantees or recommendations.
+
+### Diagnosing missing bookmaker markets
+
+Odds responses now include safe `diagnostics`: each returned Swedish bookmaker's
+market keys, returned outcome count, goal lines received before filtering, and
+accepted price count. For a shorter view use:
+
+```text
+GET /api/odds/events/{eventId}/diagnostics?competition=PL
+```
+
+This shares the normal odds response cache and request safeguards. It makes no
+additional call if the odds are already cached, otherwise it performs the normal
+three-market lookup. No API key, upstream URL or raw error body is exposed.
+
+For Svenska Spel, a `totals` entry with `goalLines: [3.5]` and `acceptedPrices: 0`
+means the provider returned a different line, which cannot be used as 2.5 odds.
+No `btts` entry means that market was absent in that response; it does not mean
+the bookmaker's own site lacks it. Empty markets and rejected invalid outcomes
+can also be distinguished by the counts. `missingMarkets` on the main response
+is aggregated across bookmakers, so use the per-bookmaker diagnostic for this
+investigation. `alternate_totals` is not requested and its availability cannot
+be inferred from this diagnostic. No alternate-market request or increased quota
+usage has been enabled without first checking the actual provider response.

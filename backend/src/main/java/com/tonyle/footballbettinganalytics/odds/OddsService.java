@@ -22,7 +22,14 @@ public class OddsService {
     public record Outcome(String name, Double price, Double point) {}
     public record Fixture(String eventId, String kickoff, String home, String away) {}
     public record Price(String bookmaker, String market, String outcome, double decimalOdds, String updatedAt) {}
-    public record AvailableOdds(Fixture fixture, String fetchedAt, Integer creditsRemaining, List<Price> prices, List<String> missingMarkets) {}
+    public record MarketDiagnostic(String market, int returnedOutcomes, List<Double> goalLines, int acceptedPrices) {}
+    public record BookmakerDiagnostic(String bookmaker, String key, List<MarketDiagnostic> markets) {}
+    public record AvailableOdds(Fixture fixture, String fetchedAt, Integer creditsRemaining, List<Price> prices,
+                                List<String> missingMarkets, List<BookmakerDiagnostic> diagnostics) {
+        public AvailableOdds(Fixture fixture, String fetchedAt, Integer creditsRemaining, List<Price> prices, List<String> missingMarkets) {
+            this(fixture, fetchedAt, creditsRemaining, prices, missingMarkets, List.of());
+        }
+    }
     private record Cached<T>(Instant expires, T value) {}
     private static final Set<String> SWEDISH_BOOKMAKERS = Set.of(
             "atg_se", "betinia_se", "betmgm_se", "betsson", "campobet_se", "expekt_se",
@@ -86,6 +93,7 @@ public class OddsService {
     static AvailableOdds map(Event event, Integer remaining) {
         var prices = new ArrayList<Price>();
         var seen = new HashSet<String>();
+        var diagnostics = new ArrayList<BookmakerDiagnostic>();
         for (var bookmaker : event.bookmakers() == null ? List.<Bookmaker>of() : event.bookmakers()) {
             if (bookmaker == null || bookmaker.title() == null || bookmaker.key() == null
                     || !SWEDISH_BOOKMAKERS.contains(bookmaker.key())) continue;
@@ -104,8 +112,23 @@ public class OddsService {
                 }
             }
         }
+        // Describe the received markets before line filtering; do not infer unrequested coverage.
+        for (var bookmaker : event.bookmakers() == null ? List.<Bookmaker>of() : event.bookmakers()) {
+            if (bookmaker == null || bookmaker.key() == null || !SWEDISH_BOOKMAKERS.contains(bookmaker.key())) continue;
+            var markets = new ArrayList<MarketDiagnostic>();
+            for (var market : bookmaker.markets() == null ? List.<Market>of() : bookmaker.markets()) {
+                if (market == null) continue;
+                var outcomes = market.outcomes() == null ? List.<Outcome>of() : market.outcomes();
+                var lines = outcomes.stream().filter(Objects::nonNull).map(Outcome::point)
+                        .filter(point -> point != null && Double.isFinite(point)).distinct().sorted().toList();
+                int accepted = (int) prices.stream().filter(p -> Objects.equals(p.bookmaker(), bookmaker.title())
+                        && Objects.equals(p.market(), market.key())).count();
+                markets.add(new MarketDiagnostic(market.key(), outcomes.size(), lines, accepted));
+            }
+            diagnostics.add(new BookmakerDiagnostic(bookmaker.title(), bookmaker.key(), List.copyOf(markets)));
+        }
         return new AvailableOdds(fixture(event), Instant.now().toString(), remaining, List.copyOf(prices),
-                List.of("h2h", "totals", "btts").stream().filter(m -> !seen.contains(m)).toList());
+                List.of("h2h", "totals", "btts").stream().filter(m -> !seen.contains(m)).toList(), List.copyOf(diagnostics));
     }
     private static Fixture fixture(Event event) { return new Fixture(event.id(), event.commence_time(), event.home_team(), event.away_team()); }
     private static FootballDataException unreadable() { return new FootballDataException(HttpStatus.BAD_GATEWAY, "The odds provider returned incomplete or unexpected data."); }

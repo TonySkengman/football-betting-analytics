@@ -34,6 +34,11 @@ public class OddsController {
     public List<OddsService.Fixture> events(@RequestParam(defaultValue = "PL") String competition) {
         return service.events(competition);
     }
+    @GetMapping("/events/{eventId}/diagnostics")
+    public List<OddsService.BookmakerDiagnostic> diagnostics(@PathVariable String eventId,
+                                                           @RequestParam(defaultValue = "PL") String competition) {
+        return service.odds(competition, eventId).diagnostics();
+    }
     @GetMapping("/events/{eventId}")
     public OddsService.AvailableOdds odds(@PathVariable String eventId, @RequestParam(defaultValue = "PL") String competition) {
         return service.odds(competition, eventId);
