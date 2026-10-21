@@ -16,6 +16,9 @@ import static com.tonyle.footballbettinganalytics.football.FootballDtos.*;
 public class FootballService {
     private final RestClient client;
     private final String apiKey;
+    private record CachedResponse(java.time.Instant expires, Object body) {}
+    private final java.util.Map<String, CachedResponse> responseCache = new java.util.LinkedHashMap<>();
+    private java.time.Instant rateLimitUntil = java.time.Instant.MIN;
     private record CachedHistory(java.time.Instant expires, TeamHistory.Loaded data) {}
     private final java.util.Map<String, CachedHistory> historyCache = new java.util.LinkedHashMap<>();
 
@@ -63,6 +66,13 @@ public class FootballService {
             throw new FootballDataException(HttpStatus.NOT_FOUND, "Match details are not available.");
         }
         return FootballMapper.details(response);
+    }
+
+    public RecentPerformance.SourceMatch matchSource(long id) {
+        if (id <= 0) throw new FootballDataException(HttpStatus.BAD_REQUEST, "Match ID must be positive.");
+        var match = fetch("/matches/" + id, RecentPerformance.SourceMatch.class);
+        if (match == null || match.id() != id) throw new FootballDataException(HttpStatus.NOT_FOUND, "Match not found.");
+        return match;
     }
 
     public RecentPerformance.Response recentPerformance(long id) {
@@ -126,14 +136,23 @@ public class FootballService {
         }
     }
 
-    private <T> T fetch(String path, Class<T> responseType) {
+    // Package access lets the opt-in evaluator reuse authentication, timeouts and safe errors.
+    synchronized <T> T fetch(String path, Class<T> responseType) {
+        String cacheKey = path + "|" + responseType.getName();
+        var cached = responseCache.get(cacheKey);
+        if (cached != null && cached.expires().isAfter(java.time.Instant.now())) return responseType.cast(cached.body());
+        if (rateLimitUntil.isAfter(java.time.Instant.now())) {
+            throw new FootballDataException(HttpStatus.TOO_MANY_REQUESTS,
+                    "Football data rate limit reached. Wait about a minute before retrying.");
+        }
         if (apiKey == null || apiKey.isBlank()) {
             throw new FootballDataException(HttpStatus.SERVICE_UNAVAILABLE,
                     "Football data is not configured. Set FOOTBALL_DATA_API_KEY on the backend.");
         }
         try {
-            return client.get().uri(path).header("X-Auth-Token", apiKey.trim()).retrieve()
+            T body = client.get().uri(path).header("X-Auth-Token", apiKey.trim()).retrieve()
                     .onStatus(status -> status.value() == 429, (request, response) -> {
+                        rateLimitUntil = java.time.Instant.now().plusSeconds(60);
                         throw new FootballDataException(HttpStatus.TOO_MANY_REQUESTS,
                                 "Football data rate limit reached. Please wait before trying again.");
                     })
@@ -151,6 +170,12 @@ public class FootballService {
                                         + "). Please try again later.");
                     })
                     .body(responseType);
+            // Team histories already have their own cache and completeness checks.
+            if (body != null && !path.startsWith("/teams/")) {
+                if (responseCache.size() >= 32) responseCache.remove(responseCache.keySet().iterator().next());
+                responseCache.put(cacheKey, new CachedResponse(java.time.Instant.now().plusSeconds(120), body));
+            }
+            return body;
         } catch (ResourceAccessException ex) {
             throw new FootballDataException(HttpStatus.GATEWAY_TIMEOUT,
                     "Could not reach the football data provider. Please try again later.");

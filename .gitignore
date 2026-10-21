@@ -20,3 +20,6 @@ application-local.properties
 
 # Logs
 *.log
+
+# Local evaluation reports
+backtest-reports/

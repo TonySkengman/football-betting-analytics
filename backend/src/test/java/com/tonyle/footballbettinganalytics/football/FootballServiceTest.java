@@ -11,6 +11,36 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 
 class FootballServiceTest {
     @Test
+    void matchMetadataIsSharedBetweenPerformanceAndOddsLookups() {
+        var builder = RestClient.builder().baseUrl("https://example.test/v4");
+        var server = MockRestServiceServer.bindTo(builder).build();
+        server.expect(requestTo("https://example.test/v4/matches/42"))
+                .andRespond(withSuccess("{\"id\":42}", MediaType.APPLICATION_JSON));
+        var service = new FootballService(builder.build(), "test-key");
+        var performanceMetadata = service.fetch("/matches/42", RecentPerformance.SourceMatch.class);
+        assertSame(performanceMetadata, service.matchSource(42));
+        server.verify();
+    }
+
+    @Test
+    void repeatedListsReuseResponsesAndRateLimitsPauseOtherRequests() {
+        var builder = RestClient.builder().baseUrl("https://example.test/v4");
+        var server = MockRestServiceServer.bindTo(builder).build();
+        server.expect(requestTo("https://example.test/v4/competitions/PL/matches"))
+                .andRespond(withSuccess("{\"matches\":[]}", MediaType.APPLICATION_JSON));
+        server.expect(requestTo("https://example.test/v4/competitions/PL/standings"))
+                .andRespond(withStatus(HttpStatus.TOO_MANY_REQUESTS));
+        var service = new FootballService(builder.build(), "test-key");
+        assertTrue(service.matches().isEmpty());
+        assertTrue(service.matches().isEmpty());
+        assertThrows(FootballDataException.class, service::standings);
+        assertEquals(429, assertThrows(FootballDataException.class, () -> service.matchSource(42)).status().value());
+        // Already cached data remains usable during the cooldown.
+        assertTrue(service.matches().isEmpty());
+        server.verify();
+    }
+
+    @Test
     void authenticatesAndMapsRealisticJson() {
         var builder = RestClient.builder().baseUrl("https://example.test/v4");
         var server = MockRestServiceServer.bindTo(builder).build();

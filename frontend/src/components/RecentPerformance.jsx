@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
+import AnalysisSection from './AnalysisSection';
 import SeasonPerformance from './SeasonPerformance';
 import MatchProbabilities from './MatchProbabilities';
 import { TeamBadge, SectionHeading } from './Ui';
@@ -66,11 +67,13 @@ export default function RecentPerformance({ matchId }) {
 
   return (
     <section className="mt-8" aria-label="Recent team performance">
-      <SectionHeading title="Recent performance" eyebrow="The last five" />
-      {loading ? <LoadingState message="Loading recent results…" /> : error ? (
+      {loading ? <LoadingState message="Loading match estimates…" /> : error ? (
         <ErrorState message={error} onRetry={() => setAttempt(value => value + 1)} />
       ) : !data ? <EmptyState message="Recent performance is unavailable." /> : (
         <>
+          <MatchProbabilities performance={data} matchId={matchId} />
+          <AnalysisSection title="Recent form, charts and season statistics">
+          <SectionHeading title="Recent performance" eyebrow="The last five" />
           <p className="text-xs text-slate-300 mb-5 leading-relaxed">{data.competition} · Season starting {data.season} only · Before {formatMatch({ utcDate: data.cutoff }).date}, {formatMatch({ utcDate: data.cutoff }).time} UTC. Other competitions and previous seasons are excluded.</p>
           <div className="grid xl:grid-cols-2 gap-4">
             <TeamPerformance performance={data.home} />
@@ -78,7 +81,7 @@ export default function RecentPerformance({ matchId }) {
           </div>
           <Suspense fallback={<LoadingState message="Loading comparison charts…" />}><TeamComparisonChart performance={data} /></Suspense>
           <SeasonPerformance performance={data} />
-          <MatchProbabilities performance={data} />
+          </AnalysisSection>
         </>
       )}
     </section>

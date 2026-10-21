@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ArrowLeft, CalendarDays, MapPin } from 'lucide-react';
+import AnalysisSection from './AnalysisSection';
 import RecentPerformance from './RecentPerformance';
 import { TeamBadge, SectionHeading } from './Ui';
 import { LoadingState, EmptyState, ErrorState } from './AsyncStates';
@@ -46,6 +47,8 @@ export default function MatchDetails({ id, standings }) {
             </div>
             {match.homeScore == null && match.awayScore == null && <p className="text-center text-xs text-slate-400 mt-4">A score has not been reported yet.</p>}
           </section>
+          <RecentPerformance key={id} matchId={id} />
+          <AnalysisSection title="Match statistics and current standings">
           <SectionHeading title="Match statistics" eyebrow="On the pitch" />
           {match.statistics.length ? (
             <div className="panel p-5 mb-8">
@@ -53,7 +56,6 @@ export default function MatchDetails({ id, standings }) {
               {match.statistics.map(stat => <div key={stat.label} className="grid grid-cols-3 py-4 border-t border-white/10 text-sm"><span className="text-red-300">{stat.home == null ? '—' : `${stat.home}${stat.unit}`}</span><span className="text-center text-slate-300">{stat.label}</span><span className="text-right text-red-300">{stat.away == null ? '—' : `${stat.away}${stat.unit}`}</span></div>)}
             </div>
           ) : <EmptyState message="Match statistics have not been supplied. Availability depends on kickoff time, coverage and API access." />}
-          <RecentPerformance key={id} matchId={id} />
           <div className="mt-8" />
           <SectionHeading title="Team comparison" eyebrow="Current competition standings" />
           {standings.loading ? <LoadingState message="Loading team statistics…" /> : standings.error ? (
@@ -66,6 +68,7 @@ export default function MatchDetails({ id, standings }) {
               })}
             </div>
           )}
+          </AnalysisSection>
           <p className="text-xs text-slate-400 mt-6">Source: football-data.org · No automatic live refresh</p>
         </>
       )}

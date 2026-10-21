@@ -1,4 +1,4 @@
-async function fetchJson(path, signal, fetcher = fetch) {
+export async function fetchJson(path, signal, fetcher = fetch) {
   let response;
   try {
     response = await fetcher(path, { signal });

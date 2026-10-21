@@ -351,3 +351,319 @@ through direct invocation with cached JUnit assertions. Full Maven verification
 is blocked by the uncached Surefire JUnit runner (`surefire-junit-platform:3.5.6`);
 mocked HTTP tests and live provider/browser verification were not run successfully
 in this environment.
+
+
+## Simple probability and odds view
+
+The dashboard lists real upcoming matches, with standings available separately.
+Fictional dashboard predictions and trend charts are no longer displayed. Open a
+match for experimental result, total-goals and both-teams-to-score probabilities.
+Supporting form, charts, season statistics and model details sit in collapsed
+“View analysis” sections. Sample sizes and coverage warnings remain visible.
+
+You can enter optional decimal bookmaker odds greater than 1 for each outcome.
+These inputs stay in React state for the current match page and are cleared when
+leaving it; they are not sent to the backend or stored. No odds API is used.
+
+- Fair odds = `1 / probability`, using the unrounded model probability.
+- Expected return per unit staked = `probability * odds - 1`.
+- Positive return is labeled “Potential value according to the model”, conditional
+  on the estimate being accurate. High probability alone does not establish value.
+
+Missing odds never produce a value label. Invalid or missing probabilities cannot
+be compared. Zero probability is preserved: no finite fair odds are displayed,
+and valid odds produce an expected return of -1 per unit. The estimates remain
+experimental and unvalidated; expected return is not a guaranteed result or a
+betting recommendation. The backend model and its thresholds are unchanged.
+
+## Backend backtesting (explicit CLI only)
+
+The `backtest` Spring profile runs a small evaluation and exits without starting
+an HTTP server or database. Ordinary application startup does not evaluate
+anything. It reuses `cross-competition-poisson-v2` without changing its model or
+sample thresholds. There is no evaluation endpoint or frontend change.
+
+From the project root, set `FOOTBALL_DATA_API_KEY` in the backend terminal, then:
+
+```sh
+cd backend
+"/Applications/IntelliJ IDEA.app/Contents/plugins/maven/lib/maven3/bin/mvn" spring-boot:run \
+  -Dspring-boot.run.profiles=backtest \
+  -Dspring-boot.run.arguments="--backtest.competition=PL --backtest.from=2026-09-01 --backtest.to=2026-09-30 --backtest.max-matches=20 --backtest.request-budget=25 --backtest.output=backtest-reports/september.json"
+```
+
+If Maven is on your PATH, replace the quoted executable path with `mvn`.
+The console summary is always produced. Omit `--backtest.output` for no file.
+JSON output must be inside `backtest-reports/`, which Git ignores. The directory
+is created when needed. Never put a token in command arguments or reports.
+
+Configuration:
+
+| Property | Meaning / default |
+| --- | --- |
+| `backtest.competition` | `PL` (default) or `CL` |
+| `backtest.from`, `backtest.to` | Required inclusive UTC dates; end cannot be in the future; maximum span 366 days |
+| `backtest.max-matches` | Earliest completed fixtures in the requested range, chronologically; default 20, range 1–100 |
+| `backtest.request-budget` | Hard maximum of attempted provider calls, including failures; default 25, range 1–100 |
+| `backtest.interval-ms` | Minimum interval between request starts; default/minimum 6500 ms |
+| `backtest.output` | Optional path under `backtest-reports/` |
+
+### Historical retrieval and safeguards
+
+Official documentation checked for this implementation:
+
+- [Team match filters](https://docs.football-data.org/general/v4/team.html): dateFrom/dateTo, FINISHED status and limit up to 500.
+- [Competition match filters](https://docs.football-data.org/general/v4/competition.html): explicit season and status; omitted season defaults to the current season.
+- [Access and throttling policies](https://docs.football-data.org/general/v4/policies.html): subscription-dependent access and free-plan limit of 10 requests/minute.
+
+For PL/CL, July starts the season-year boundary used for retrieval. The tool
+fetches each required competition season once, newest first, covering the
+requested period and its preceding 365-day baseline window. Returned fixtures
+are deduplicated by ID. Each distinct selected team's cross-competition history
+is fetched once for the combined date window, with limit 500; histories are
+reused in memory across all evaluation matches. Local filtering still applies
+each match's exact timestamp, 365-day lookback, score rules and latest-20
+selection before estimation. Same-time fixtures and the evaluated match itself
+never contribute. Previous-season inputs remain allowed by the existing model.
+
+An empty match list is valid; a missing/malformed body is not. A team response
+reaching 500 is unavailable because truncation cannot be ruled out. The tool
+stops further calls after a provider/network/access/rate-limit failure. It never
+retries automatically. Exhausted budgets or failed slices are reported as partial
+runs; incomplete competition retrieval disables baseline comparisons rather than
+using a partial baseline. Missing team histories never become valid empty inputs.
+The pacing assumes this runner is the only client using the key; other activity
+can still cause a rate limit. A run can take several minutes.
+
+The match limit bounds selected candidates, including those later skipped for
+unknown regulation scores. The report distinguishes candidates outside that
+limit from selected fixtures skipped during evaluation. If retrieval fails,
+unknown missing candidates cannot be counted; reported totals cover only fetched
+records. No claim of complete competition or historical coverage is made.
+
+### Outcomes, baseline and paired comparisons
+
+Only confirmed regulation-time scores (including stoppage time) are scored,
+using the existing regularTime/duration rules. Shootout/extra-time totals are
+never substituted. Outcomes are home win/draw/away win, over (>2 goals)/under,
+and both teams scoring at least once (Yes/No).
+
+The reference baseline is the unsmoothed empirical outcome frequency among the
+same competition's completed regulation-score matches in the preceding 365 days,
+strictly before each evaluated kickoff. It needs at least 30 eligible matches.
+It can span seasons but does not use the selected fixture or later results.
+It is a simple comparison, not a proposed replacement model.
+
+Model and baseline scores and calibration tables use **exactly the same paired
+matches** for all three markets. Model-available matches without a usable baseline
+are counted separately and excluded from both metrics. Reports include paired
+match IDs, model availability, skipped counts by reason, configuration, model
+version, request usage and retrieval issues. Empty evaluations return null
+metrics, never a misleading zero score. A partial run may still contain valid
+paired results if unrelated team retrieval failed; it remains labeled partial.
+
+### Metric definitions
+
+Lower scores are better. Reported scores are arithmetic means over paired matches.
+
+- Multiclass 1X2 Brier: `sum((p_i - y_i)^2)` across all three outcomes, with no
+  division by class count (range 0–2).
+- Binary Brier: `(p - y)^2` for Over and BTTS Yes respectively (range 0–1).
+- Log loss: `-ln(max(1e-15, probability_of_actual_outcome))`, natural logarithm.
+  The epsilon makes impossible observed outcomes finite for reporting; it does
+  not alter model probabilities or Brier scores. Correct probability 1 has loss 0.
+- Calibration: ten bins `[0.0,0.1)`, …, `[0.9,1.0]`. Show event count, mean
+  probability and observed outcome frequency; empty bins are unavailable.
+  Binary tables use Over/Yes; 1X2 pools all three outcome events (three events per
+  match, not independent observations). Bins with fewer than 20 events are marked
+  sparse. This threshold is a display warning, not statistical certainty.
+
+### Interpretation and verification
+
+Subscription access can exclude competitions and older seasons. Records use
+current kickoff times, scores and FINISHED statuses, not archived information
+as it existed on prediction day. Timestamp filtering prevents direct future-match
+leakage but cannot reconstruct corrections, postponement knowledge or the precise
+historical time a result became available. Mixed competitions, opponent strength,
+small samples and selection/coverage bias still affect interpretation. Do not
+infer accuracy or profitability from a few matches. No odds, betting returns or
+model tuning are included.
+
+Backend sources and tests compiled. All 39 backend test methods, including mocked
+HTTP tests and nine new backtesting tests, passed through direct invocation.
+Full `mvn verify` remains blocked here by the uncached Surefire JUnit platform
+provider 3.5.6; this is not a successful full Maven test run. No authenticated
+live backtest was performed in this environment. An unauthenticated CLI smoke
+test confirmed that the opt-in profile starts without a server, exits, and writes
+a JSON report correctly marked partial when the API key is absent.
+
+## Candidate experiment: blending probabilities
+
+The backtest now scores one fixed candidate, `equal-blend-experiment-v1`:
+
+```text
+candidate probability = 0.5 * current model probability + 0.5 * baseline probability
+```
+
+This is a simple attempt to reduce dependence on noisy team venue samples by
+moving each outcome toward earlier competition frequencies. The weight is fixed
+in advance for all markets; no weight search or fitting is performed. It is a
+hypothesis to evaluate, not an established improvement. The production Poisson
+model, its thresholds, expected goals and frontend estimates remain unchanged.
+
+The candidate uses exactly the same paired matches, prior-only baseline, regulation
+scores and unavailable-data rules as both existing approaches. It preserves sums,
+complements and genuine shared zeros. A missing baseline or model never becomes
+a candidate estimate. There are no additional provider calls. Console and JSON
+market summaries now include `candidate` alongside `model` and `baseline`.
+
+New reports include per-match `evaluation.cases` with match ID, kickoff, actual
+outcomes, current-model probabilities and baseline probabilities. This allows
+later offline comparisons without retrieving those fixtures again. Earlier JSON
+reports contain only aggregates: the blended Brier/log loss cannot be recovered
+from those aggregate scores, so a new run is necessary to measure the candidate.
+These files remain local and ignored by Git.
+
+For a diagnostic comparison on the previously evaluated January–April window,
+run from `backend` with your API key already exported:
+
+```sh
+"/Applications/IntelliJ IDEA.app/Contents/plugins/maven/lib/maven3/bin/mvn" spring-boot:run \
+  -Dspring-boot.run.profiles=backtest \
+  -Dspring-boot.run.arguments="--backtest.competition=PL --backtest.from=2026-01-01 --backtest.to=2026-04-30 --backtest.max-matches=100 --backtest.request-budget=25 --backtest.output=backtest-reports/blend-comparison.json"
+```
+
+The existing reports will be preserved. Because this candidate was proposed after
+reviewing those periods, the rerun is a development comparison, not independent
+validation. Any decision to deploy a change should also consider a genuinely
+unexamined period; do not claim validation or profitability from these reports.
+
+Verification: main/test sources compiled and all 41 backend test methods passed
+by direct invocation, including blend mathematics, paired scoring, unavailable
+data and report cases. Full Maven verification is still blocked by the uncached
+Surefire provider. The candidate has not yet been measured on live historical
+data in this environment; no accuracy improvement is claimed.
+
+## Odds API connection check
+
+Set the separate key in the same terminal used to start Spring Boot:
+
+```sh
+export ODDS_API_KEY='your-actual-odds-api-key'
+```
+
+Restart the normal backend (`mvn spring-boot:run`, without the backtest profile).
+The key is read only on the backend. It is never returned to the frontend or put
+in browser URLs. Existing football-data.org credentials remain separate.
+
+List available upcoming events (no paid odds lookup):
+
+```sh
+curl 'http://localhost:8080/api/odds/events?competition=PL'
+```
+
+Use `competition=CL` for Champions League. Choose an `eventId` from that response,
+then request its actual market availability:
+
+```sh
+curl 'http://localhost:8080/api/odds/events/EVENT_ID_FROM_LIST?competition=PL'
+```
+
+Replace the placeholder with the returned 32-character event ID. Odds API IDs
+are different from football-data.org match IDs; the backend never guesses a
+cross-provider match. These endpoints support connection/coverage checks. Automatic matching and
+frontend display use the match endpoint described below.
+
+The response includes bookmaker names, decimal prices, source update timestamps,
+fetch time, the provider's remaining-credit header when supplied, and missing
+markets. `h2h` is match result, `totals` is filtered to exactly 2.5 goals, and
+`btts` is both teams to score. Only supported market/outcome names and finite
+prices greater than 1 are retained. A market can contain only some outcomes;
+missing outcomes are never invented. The Swedish region (`regions=se`) is requested, with returned bookmaker keys checked against the provider’s documented Swedish list. Availability
+is not guaranteed for every fixture, bookmaker or market. A missing timestamp
+means the provider did not supply one; fetch time is not the quote update time.
+
+Official documentation: https://the-odds-api.com/liveapi/guides/v4/
+
+The `/events` discovery endpoint does not consume usage credits. The event odds
+endpoint requests three markets for one Swedish region, normally up to three credits per
+uncached lookup. Both discovery and successful odds results are cached for ten
+minutes. Concurrent calls are serialized to avoid duplicate requests. An
+in-process guard permits at most 20 paid lookup attempts per backend run (up to
+60 credits at the documented rate), and blocks a lookup if the latest known
+remaining quota is below three. Failed attempts count toward the guard. These
+are local safeguards, not a shared account-level budget; restarting the backend
+resets the attempt counter. Cache is bounded to 50 odds events; no database or
+polling is involved. Cached remaining credits are a snapshot, not a live balance.
+
+Access, quota, network and unreadable-response errors are returned safely without
+upstream bodies or URLs, which could contain the key. Provider/network failures
+pause further calls for 60 seconds. No automatic retries or calls at startup occur.
+No historical odds or prediction-model changes are included. This stage does not
+calculate value from provider odds or make betting recommendations.
+
+## Bookmaker odds in match details
+
+On an upcoming match's probability section, choose **Load bookmaker odds**.
+Then select a bookmaker under **Odds source**. Each outcome shows the actual
+price and provider update time and uses the existing fair-odds/expected-return
+comparison. Missing bookmaker outcomes remain unavailable; they are never filled
+with another bookmaker's price. Choose **Manual entry** to return to typing odds.
+The source selection and entered odds are local to the current match page.
+
+This uses `GET /api/odds/matches/{footballDataMatchId}`. The backend retrieves
+canonical football-data.org metadata, derives PL/CL from that metadata, then
+matches the Odds API event by both oriented team names and the exact kickoff
+instant. Name normalization handles accents, punctuation and standalone FC/AFC;
+a few explicitly documented aliases in `OddsMatchMatcher` handle Wolves, Bayern,
+Inter and Sporting. No fuzzy matching or kickoff tolerance is used. Unknown names,
+ambiguous matches and missing events return a safe error and allow manual entry.
+Only upcoming SCHEDULED/TIMED matches are eligible for automatic odds.
+
+Paid lookups occur only after a unique fixture match, through the existing cached,
+budget-limited service. Changing bookmakers makes no request. Loading a match or
+the dashboard does not fetch odds automatically. An explicit retry/check reuses
+the ten-minute backend cache; it does not force a paid refresh. Each button action
+also retrieves football-data.org match metadata, so avoid repeated checks.
+
+Quotes older than 15 minutes, future-dated or missing a valid source timestamp
+are shown but excluded from automated value comparisons. A local timer checks
+quote age; it makes no network requests. Missing markets, coverage failures,
+loading, empty results and retry remain visible without blocking manual entry or
+model estimates. Exchange commission/account-specific conditions are not modeled;
+prices do not imply eligibility or a betting recommendation. Model calculations
+and sample thresholds are unchanged; all secrets remain backend-only.
+
+### Football-data.org rate limits when loading odds
+
+Odds loading verifies the selected match against football-data.org before spending
+Odds API credits. These are separate providers with separate limits. Repeated
+navigation can exhaust the football-data.org allowance even when Odds API credits
+remain available.
+
+Successful football-data.org match metadata, fixture lists and standings responses
+are now cached for two minutes (maximum 32 request/type entries). Concurrent
+identical requests reuse the result; performance and odds lookups share canonical
+match metadata. Team histories keep their existing two-minute completeness-aware
+cache. Provider failures are not stored as successful data. A football-data.org
+429 starts a 60-second local cooldown for uncached requests; existing cached
+responses remain available. This reduces duplicate requests but does not guarantee
+that uncached navigation stays within the account-wide rate limit.
+
+If the page reports a football-data rate limit, wait at least one minute before
+retrying. Restart Spring Boot after installing these changes; avoid repeated
+refreshes or simultaneous backtests using the same key.
+
+
+### Swedish bookmaker filter
+
+The backend requests `regions=se`, the provider's Swedish region, rather than
+the broad European feed or a two-bookmaker subset. The returned keys are checked
+against the current documented Swedish list: ATG, Betinia, BetMGM, Betsson,
+CampoBet, Nya Expekt, Hajper, LeoVegas, Mr Green, NordicBet, 888sport, Svenska Spel
+and Unibet. This represents this provider's supported Swedish entries, not a
+claim that every Swedish operator or fixture is covered. Missing markets remain
+unavailable with manual entry as a fallback. Restart the backend and reload odds
+to clear the old cached response.
+
+Official coverage: https://the-odds-api.com/sports-odds-data/bookmaker-apis.html#se-bookmakers
