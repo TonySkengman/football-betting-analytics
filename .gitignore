@@ -1,0 +1,22 @@
+# Frontend
+node_modules/
+frontend/dist/
+*.tsbuildinfo
+
+# Backend
+backend/target/
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+application-local.properties
+
+# Editors and OS
+.idea/
+.vscode/
+*.iml
+.DS_Store
+
+# Logs
+*.log
