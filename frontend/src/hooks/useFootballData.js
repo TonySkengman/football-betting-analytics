@@ -6,9 +6,12 @@ export default function useFootballData(path) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [attempt, setAttempt] = useState(0);
+  const [loadedPath, setLoadedPath] = useState(null);
 
   useEffect(() => {
     const controller = new AbortController();
+    setLoadedPath(path);
+    setData([]);
     setLoading(true);
     setError('');
     fetchList(path, controller.signal)
@@ -24,5 +27,5 @@ export default function useFootballData(path) {
     return () => controller.abort();
   }, [path, attempt]);
 
-  return { data, loading, error, retry: () => setAttempt(value => value + 1) };
+  return { data: loadedPath === path ? data : [], loading: loadedPath !== path || loading, error: loadedPath === path ? error : '', retry: () => setAttempt(value => value + 1) };
 }

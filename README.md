@@ -1,6 +1,6 @@
 # Football Betting Analytics
 
-A React and Spring Boot portfolio application for Premier League football analytics.
+A React and Spring Boot portfolio application for Premier League and UEFA Champions League football analytics.
 Matches and standings come from football-data.org API v4 through the backend.
 The chart and prediction cards still use clearly labeled fictional samples; no
 prediction model or odds integration has been implemented.
@@ -110,3 +110,72 @@ Official API reference: https://docs.football-data.org/general/v4/competition.ht
 
 Do not commit or push automatically. Build outputs, dependencies, and local secrets
 are ignored by `.gitignore`.
+
+## Competition selector
+
+Choose Premier League or UEFA Champions League in the dashboard header. Matches,
+standings, and overview statistics reload for the selected competition. The API
+accepts `competition=PL` (default) or `competition=CL` on both endpoints:
+
+```text
+/api/matches?competition=CL
+/api/standings?competition=CL
+```
+
+Other codes return HTTP 400 before making an upstream request. Champions League
+standings are shown as a league-phase table, not a knockout bracket. If the
+provider returns 404 for its Champions League standings, this endpoint returns
+an empty list; authorization, rate-limit, and other failures remain errors.
+Goals and team counts refer to the returned table, not all knockout or qualifying
+participants. Existing prediction and chart samples remain fictional Premier
+League examples and are not recalculated by changing the competition.
+
+## Match details
+
+Click any upcoming match to open its details page. Hash links include the match ID
+and competition, for example `/#match/123456/CL`, and support browser back/forward.
+The backend endpoint `GET /api/matches/{id}` fetches an individual match using the
+same server-side API key. Invalid IDs return 400; missing matches return 404.
+
+Details include both teams and crests, UTC kickoff, status, provider score, and
+venue when available. Available match statistics include possession, shots,
+shots on target, corners, fouls and cards. Missing scores/statistics are never
+replaced with zero: scheduled fixtures usually have neither. Coverage and API
+plan affect which statistics the provider supplies. Team comparison uses the
+selected competition's current standings, not historical standings at kickoff.
+No automatic polling is performed. The existing sample predictions are unchanged.
+
+## Recent team performance
+
+Match details now includes the last five completed results for each team, newest
+first, strictly before the selected fixture's kickoff. Results cover only the
+selected competition and its season (not all competitions or previous seasons).
+
+`GET /api/matches/{id}/performance` reads the fixture metadata, then fetches that
+competition's finished season fixtures once for both teams. It returns a clean
+response containing competition, season, cutoff, and each team's results/summary.
+The key remains backend-only. The section loads independently and has its own
+retry button; provider authentication, rate-limit and network errors use the
+existing safe error handling. No automatic polling or retry is added.
+
+Scores and W/D/L are from the team's perspective, including for away matches.
+Missing scores remain unknown. Summaries and per-match goals scored/conceded
+averages use only results with both scores available, and explicitly show that
+sample size. Missing goal totals/averages display as unavailable, not zero.
+Zero to four eligible matches are shown without filling gaps. Selection uses
+provider FINISHED status and kickoff timestamps; no historical completion-time
+snapshot is available. The selected fixture, later fixtures and equal kickoff
+timestamps are excluded. Invalid dates are excluded. Scores follow the provider's
+fullTime field; no separate penalty-shootout analysis is calculated.
+
+The backend tests cover cutoff, ordering, five-result limit, perspective, missing
+scores, summary calculations, and a shared competition request for both teams.
+Frontend tests cover the new response handling and rate-limit/empty/error cases.
+
+Recent-performance verification: all 10 frontend tests and the frontend production
+build passed. Backend production and test sources compiled. Three pure backend
+calculation tests also passed when invoked directly using cached JUnit assertions
+(order/cutoff/limit, home-away calculations, and empty/missing values). Full Maven
+verification and mocked HTTP test execution remain blocked by the uncached
+Surefire JUnit platform runner. Live provider/browser verification was not possible
+from this restricted environment.

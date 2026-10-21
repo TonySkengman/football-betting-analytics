@@ -42,4 +42,21 @@ class FootballMapperTest {
         assertEquals(503, error.status().value());
         assertTrue(error.getMessage().contains("FOOTBALL_DATA_API_KEY"));
     }
+
+    @Test
+    void mapsDetailsWithoutInventingMissingStatisticsOrScores() {
+        var home = new ApiDetailTeam(1, "Home", "HOM", null, java.util.Map.of("shots", 0));
+        var away = new ApiDetailTeam(2, "Away", "AWY", null, null);
+        var source = new ApiMatchDetails(7, null, "SCHEDULED", 9, new ApiCompetition("Premier League"), null, home, away, null);
+        var result = FootballMapper.details(source);
+        assertNull(result.homeScore());
+        assertNull(result.awayScore());
+        assertEquals(1, result.statistics().size());
+        assertEquals(0, result.statistics().getFirst().home());
+        assertNull(result.statistics().getFirst().away());
+        var finished = new ApiMatchDetails(7, null, "FINISHED", 9, null, null, home, away,
+                new ApiScore(new ApiScoreline(0, 2)));
+        assertEquals(0, FootballMapper.details(finished).homeScore());
+        assertEquals(2, FootballMapper.details(finished).awayScore());
+    }
 }

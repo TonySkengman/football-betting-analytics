@@ -60,4 +60,91 @@ class FootballServiceTest {
         assertEquals(504, error.status().value());
         server.verify();
     }
+
+    @Test
+    void routesChampionsLeagueRequests() {
+        var builder = RestClient.builder().baseUrl("https://example.test/v4");
+        var server = MockRestServiceServer.bindTo(builder).build();
+        server.expect(requestTo("https://example.test/v4/competitions/CL/matches"))
+                .andRespond(withSuccess("{\"matches\":[]}", MediaType.APPLICATION_JSON));
+        server.expect(requestTo("https://example.test/v4/competitions/CL/standings"))
+                .andRespond(withSuccess("{\"standings\":[]}", MediaType.APPLICATION_JSON));
+        var service = new FootballService(builder.build(), "test-key");
+        assertTrue(service.matches("CL").isEmpty());
+        assertTrue(service.standings("CL").isEmpty());
+        server.verify();
+    }
+
+    @Test
+    void rejectsUnsupportedCompetitionBeforeRequestingProvider() {
+        var service = new FootballService(RestClient.create(), "test-key");
+        var error = assertThrows(FootballDataException.class, () -> service.matches("INVALID"));
+        assertEquals(400, error.status().value());
+        assertThrows(FootballDataException.class, () -> service.standings("INVALID"));
+    }
+
+    @Test
+    void missingChampionsLeagueTableReturnsEmptyButMatchesStillReportErrors() {
+        var builder = RestClient.builder().baseUrl("https://example.test/v4");
+        var server = MockRestServiceServer.bindTo(builder).build();
+        server.expect(anything()).andRespond(withStatus(HttpStatus.NOT_FOUND));
+        server.expect(anything()).andRespond(withStatus(HttpStatus.NOT_FOUND));
+        var service = new FootballService(builder.build(), "test-key");
+        assertTrue(service.standings("CL").isEmpty());
+        assertThrows(FootballDataException.class, () -> service.matches("CL"));
+        server.verify();
+    }
+
+    @Test
+    void fetchesSingleMatchAndMapsScore() {
+        var builder = RestClient.builder().baseUrl("https://example.test/v4");
+        var server = MockRestServiceServer.bindTo(builder).build();
+        server.expect(requestTo("https://example.test/v4/matches/7"))
+                .andExpect(header("X-Auth-Token", "test-key"))
+                .andRespond(withSuccess("""
+                    {"id":7,"status":"FINISHED","homeTeam":{"id":1,"name":"Home"},
+                    "awayTeam":{"id":2,"name":"Away"},"score":{"fullTime":{"home":0,"away":2}}}
+                    """, MediaType.APPLICATION_JSON));
+        var result = new FootballService(builder.build(), "test-key").matchDetails(7);
+        assertEquals(0, result.homeScore());
+        assertEquals(2, result.awayScore());
+        assertTrue(result.statistics().isEmpty());
+        server.verify();
+    }
+
+    @Test
+    void handlesMissingAndInvalidMatchIds() {
+        var builder = RestClient.builder().baseUrl("https://example.test/v4");
+        var server = MockRestServiceServer.bindTo(builder).build();
+        server.expect(anything()).andRespond(withNoContent());
+        var service = new FootballService(builder.build(), "test-key");
+        assertEquals(404, assertThrows(FootballDataException.class, () -> service.matchDetails(7)).status().value());
+        assertEquals(400, assertThrows(FootballDataException.class, () -> service.matchDetails(-1)).status().value());
+        server.verify();
+    }
+
+    @Test
+    void recentPerformanceFetchesSeasonOnceForBothTeams() {
+        var builder = RestClient.builder().baseUrl("https://example.test/v4");
+        var server = MockRestServiceServer.bindTo(builder).build();
+        server.expect(requestTo("https://example.test/v4/matches/99"))
+                .andRespond(withSuccess("""
+                    {"id":99,"utcDate":"2026-10-21T15:00:00Z",
+                     "competition":{"code":"CL","name":"Champions League"},
+                     "season":{"startDate":"2026-09-01"},
+                     "homeTeam":{"id":1,"name":"Home"},"awayTeam":{"id":2,"name":"Away"}}
+                    """, MediaType.APPLICATION_JSON));
+        server.expect(requestTo("https://example.test/v4/competitions/CL/matches?season=2026&status=FINISHED"))
+                .andExpect(header("X-Auth-Token", "test-key"))
+                .andRespond(withSuccess("""
+                    {"matches":[{"id":1,"utcDate":"2026-10-01T15:00:00Z","status":"FINISHED",
+                    "homeTeam":{"id":1,"name":"Home"},"awayTeam":{"id":2,"name":"Away"},
+                    "score":{"fullTime":{"home":2,"away":0}}}]}
+                    """, MediaType.APPLICATION_JSON));
+        var response = new FootballService(builder.build(), "test-key").recentPerformance(99);
+        assertEquals("Champions League", response.competition());
+        assertEquals(1, response.home().summary().wins());
+        assertEquals(1, response.away().summary().losses());
+        server.verify();
+    }
 }

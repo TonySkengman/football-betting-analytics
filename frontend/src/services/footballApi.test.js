@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { fetchList, formatMatch, formatStanding } from './footballApi.js';
+import { fetchList, formatMatch, formatStanding, fetchMatchDetails, fetchRecentPerformance, formatScore, formatStatus } from './footballApi.js';
 
 test('loads arrays and supports empty responses', async () => {
   assert.deepEqual(await fetchList('/api/matches', undefined, async () => new Response('[{"id":1}]')), [{ id: 1 }]);
@@ -31,4 +31,38 @@ test('preserves crest URLs for fixtures and standings', () => {
   const team = { id: 57, name: 'Arsenal', code: 'ARS', crest: 'https://crests.football-data.org/57.png' };
   assert.equal(formatMatch({ home: team }).home.crest, team.crest);
   assert.equal(formatStanding({ team }).crest, team.crest);
+});
+
+
+test('match details preserve zero scores and unavailable statistics', async () => {
+  const detail = { id: 7, home: { id: 1 }, away: { id: 2 }, homeScore: 0, awayScore: 0, statistics: [] };
+  const match = await fetchMatchDetails(7, undefined, async path => {
+    assert.equal(path, '/api/matches/7');
+    return new Response(JSON.stringify(detail));
+  });
+  assert.equal(formatScore(match.homeScore, match.awayScore), '0 : 0');
+  assert.equal(formatScore(null, null), '— : —');
+  assert.equal(formatStatus('POSTPONED'), 'Postponed');
+  assert.deepEqual(match.statistics, []);
+});
+test('match details handle empty, malformed, and not found responses', async () => {
+  assert.equal(await fetchMatchDetails(7, undefined, async () => new Response(null, { status: 204 })), null);
+  await assert.rejects(fetchMatchDetails(7, undefined, async () => new Response('{}')), /unexpected match details/);
+  await assert.rejects(fetchMatchDetails(7, undefined, async () => new Response('{"message":"Match not found"}', { status: 404 })), /Match not found/);
+});
+
+
+test('recent performance loads both teams without inventing missing results', async () => {
+  const performance = { competition: 'Premier League', home: { team: { id: 1 }, results: [], summary: { matches: 0, averageScored: null } }, away: { team: { id: 2 }, results: [], summary: { matches: 0 } } };
+  const result = await fetchRecentPerformance(99, undefined, async path => {
+    assert.equal(path, '/api/matches/99/performance');
+    return new Response(JSON.stringify(performance));
+  });
+  assert.equal(result.home.summary.averageScored, null);
+  assert.deepEqual(result.home.results, []);
+});
+test('recent performance handles empty responses, rate limits and malformed data', async () => {
+  assert.equal(await fetchRecentPerformance(99, undefined, async () => new Response(null, { status: 204 })), null);
+  await assert.rejects(fetchRecentPerformance(99, undefined, async () => new Response('{"message":"Rate limit reached"}', { status: 429 })), /Rate limit reached/);
+  await assert.rejects(fetchRecentPerformance(99, undefined, async () => new Response('{}')), /unexpected recent performance/);
 });

@@ -1,9 +1,9 @@
 import { Clock3 } from 'lucide-react';
 import { TeamBadge } from './Ui';
 
-export function MatchCard({ match }) {
+export function MatchCard({ match, competition = 'PL' }) {
   return (
-    <article className="panel match-card">
+    <a href={`#match/${match.id}/${competition}`} className="panel match-card block transition-colors hover:border-sky-400/40 focus-visible:outline-2 focus-visible:outline-sky-400" aria-label={`View ${match.home.name} versus ${match.away.name} details`}>
       <div className="flex justify-between items-center text-xs text-slate-500">
         <span>{match.date} · UTC</span>
         <span className="flex gap-1.5 items-center"><Clock3 size={12} />{match.time}</span>
@@ -14,10 +14,10 @@ export function MatchCard({ match }) {
         <div className="match-team"><TeamBadge team={match.away} /><p>{match.away.name}</p></div>
       </div>
       <div className="flex justify-between text-xs text-slate-400 border-t border-white/5 pt-4">
-        <span>{match.matchday ? `Matchweek ${match.matchday}` : 'Premier League'}</span>
+        <span>{match.matchday ? `Matchweek ${match.matchday}` : 'Matchweek to be confirmed'}</span>
         <span>{match.status === 'TIMED' ? 'Kickoff confirmed' : 'Scheduled'}</span>
       </div>
-    </article>
+    </a>
   );
 }
 
