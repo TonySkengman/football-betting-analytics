@@ -1,7 +1,11 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
+import SeasonPerformance from './SeasonPerformance';
+import MatchProbabilities from './MatchProbabilities';
 import { TeamBadge, SectionHeading } from './Ui';
 import { EmptyState, ErrorState, LoadingState } from './AsyncStates';
 import { fetchRecentPerformance, formatMatch } from '../services/footballApi';
+
+const TeamComparisonChart = lazy(() => import('./TeamComparisonChart'));
 
 function TeamPerformance({ performance }) {
   const { team, results, summary } = performance;
@@ -72,6 +76,9 @@ export default function RecentPerformance({ matchId }) {
             <TeamPerformance performance={data.home} />
             <TeamPerformance performance={data.away} />
           </div>
+          <Suspense fallback={<LoadingState message="Loading comparison charts…" />}><TeamComparisonChart performance={data} /></Suspense>
+          <SeasonPerformance performance={data} />
+          <MatchProbabilities performance={data} />
         </>
       )}
     </section>

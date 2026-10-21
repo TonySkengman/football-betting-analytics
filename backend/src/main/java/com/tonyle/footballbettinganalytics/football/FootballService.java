@@ -16,6 +16,8 @@ import static com.tonyle.footballbettinganalytics.football.FootballDtos.*;
 public class FootballService {
     private final RestClient client;
     private final String apiKey;
+    private record CachedHistory(java.time.Instant expires, TeamHistory.Loaded data) {}
+    private final java.util.Map<String, CachedHistory> historyCache = new java.util.LinkedHashMap<>();
 
     @org.springframework.beans.factory.annotation.Autowired
     public FootballService(@Value("${football-data.base-url}") String baseUrl,
@@ -85,9 +87,36 @@ public class FootballService {
         var response = fetch("/competitions/" + competition + "/matches?season=" + season + "&status=FINISHED",
                 RecentPerformance.SourceMatches.class);
         var matches = response == null || response.matches() == null ? List.<RecentPerformance.SourceMatch>of() : response.matches();
+        var eligible = SeasonPerformance.eligible(selected, matches);
+        var homeHistory = loadTeamHistory(selected.homeTeam().id(), cutoff);
+        // Stop after a rate-limit failure rather than immediately making another request.
+        var awayHistory = homeHistory.error() != null && homeHistory.error().contains("rate limit")
+                ? TeamHistory.Loaded.failed("History request skipped because the provider rate limit was reached.")
+                : loadTeamHistory(selected.awayTeam().id(), cutoff);
         return new RecentPerformance.Response(selected.competition().name(), season, selected.utcDate(),
-                RecentPerformance.calculate(selected.homeTeam(), id, cutoff, matches),
-                RecentPerformance.calculate(selected.awayTeam(), id, cutoff, matches));
+                RecentPerformance.calculate(selected.homeTeam(), id, cutoff, eligible),
+                RecentPerformance.calculate(selected.awayTeam(), id, cutoff, eligible),
+                SeasonPerformance.calculate(selected, eligible),
+                PoissonModel.estimate(selected, homeHistory, awayHistory));
+    }
+
+    private synchronized TeamHistory.Loaded loadTeamHistory(long teamId, java.time.Instant cutoff) {
+        var date = cutoff.atZone(java.time.ZoneOffset.UTC).toLocalDate();
+        String path = "/teams/" + teamId + "/matches?dateFrom=" + date.minusDays(TeamHistory.LOOKBACK_DAYS)
+                + "&dateTo=" + date.plusDays(1) + "&status=FINISHED&limit=" + TeamHistory.REQUEST_LIMIT;
+        var cached = historyCache.get(path);
+        if (cached != null && cached.expires().isAfter(java.time.Instant.now())) return cached.data();
+        try {
+            var response = fetch(path, RecentPerformance.SourceMatches.class);
+            if (response == null || response.matches() == null) return TeamHistory.Loaded.failed("The provider returned an empty or incomplete history response.");
+            if (response.matches().size() >= TeamHistory.REQUEST_LIMIT) return TeamHistory.Loaded.failed("History reached the 500-result limit; completeness cannot be established.");
+            var history = new TeamHistory.Loaded(List.copyOf(response.matches()), null);
+            if (historyCache.size() >= 32) historyCache.remove(historyCache.keySet().iterator().next());
+            historyCache.put(path, new CachedHistory(java.time.Instant.now().plusSeconds(120), history));
+            return history;
+        } catch (FootballDataException exception) {
+            return TeamHistory.Loaded.failed(exception.getMessage());
+        }
     }
 
     private void validateCompetition(String competition) {

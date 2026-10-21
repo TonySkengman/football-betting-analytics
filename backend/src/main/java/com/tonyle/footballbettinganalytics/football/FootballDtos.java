@@ -42,7 +42,9 @@ public final class FootballDtos {
     public record ApiDetailTeam(long id, String name, String tla, String crest,
                                java.util.Map<String, Integer> statistics) {}
     @com.fasterxml.jackson.annotation.JsonIgnoreProperties(ignoreUnknown = true)
-    public record ApiScore(ApiScoreline fullTime) {}
+    public record ApiScore(ApiScoreline fullTime, ApiScoreline regularTime, String duration) {
+        public ApiScore(ApiScoreline fullTime) { this(fullTime, null, null); }
+    }
     @com.fasterxml.jackson.annotation.JsonIgnoreProperties(ignoreUnknown = true)
     public record ApiScoreline(Integer home, Integer away) {}
 }

@@ -24,7 +24,7 @@ public final class RecentPerformance {
                           Integer goalsScored, Integer goalsConceded, Double averageScored, Double averageConceded) {}
     public record TeamPerformance(Team team, List<Result> results, Summary summary) {}
     public record Response(String competition, String season, String cutoff,
-                           TeamPerformance home, TeamPerformance away) {}
+                           TeamPerformance home, TeamPerformance away, SeasonPerformance.Response seasonPerformance, PoissonModel.Estimate prediction) {}
 
     public static TeamPerformance calculate(ApiTeam team, long selectedId, Instant cutoff, List<SourceMatch> matches) {
         var results = matches.stream()

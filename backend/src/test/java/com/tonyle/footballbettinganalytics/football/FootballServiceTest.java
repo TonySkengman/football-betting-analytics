@@ -141,10 +141,17 @@ class FootballServiceTest {
                     "homeTeam":{"id":1,"name":"Home"},"awayTeam":{"id":2,"name":"Away"},
                     "score":{"fullTime":{"home":2,"away":0}}}]}
                     """, MediaType.APPLICATION_JSON));
+        server.expect(requestTo("https://example.test/v4/teams/1/matches?dateFrom=2025-10-21&dateTo=2026-10-22&status=FINISHED&limit=500"))
+                .andRespond(withSuccess("{\"matches\":[]}", MediaType.APPLICATION_JSON));
+        server.expect(requestTo("https://example.test/v4/teams/2/matches?dateFrom=2025-10-21&dateTo=2026-10-22&status=FINISHED&limit=500"))
+                .andRespond(withSuccess("{\"matches\":[]}", MediaType.APPLICATION_JSON));
         var response = new FootballService(builder.build(), "test-key").recentPerformance(99);
         assertEquals("Champions League", response.competition());
         assertEquals(1, response.home().summary().wins());
         assertEquals(1, response.away().summary().losses());
+        assertEquals(1, response.seasonPerformance().competition().played());
+        assertEquals(2.0, response.seasonPerformance().home().home().averageScored());
+        assertEquals(0.0, response.seasonPerformance().away().away().averageScored());
         server.verify();
     }
 }

@@ -66,3 +66,16 @@ test('recent performance handles empty responses, rate limits and malformed data
   await assert.rejects(fetchRecentPerformance(99, undefined, async () => new Response('{"message":"Rate limit reached"}', { status: 429 })), /Rate limit reached/);
   await assert.rejects(fetchRecentPerformance(99, undefined, async () => new Response('{}')), /unexpected recent performance/);
 });
+
+
+test('performance response preserves experimental availability and genuine zero probabilities', async () => {
+  const base = { home: { team: { id: 1 }, summary: {}, results: [] }, away: { team: { id: 2 }, summary: {}, results: [] } };
+  const prediction = { modelVersion: 'independent-poisson-v1', status: 'available', homeExpectedGoals: 0, probabilities: { homeWin: 0, bttsYes: 0 } };
+  const result = await fetchRecentPerformance(1, undefined, async () => new Response(JSON.stringify({ ...base, prediction })));
+  assert.equal(result.prediction.probabilities.homeWin, 0);
+  assert.equal(result.prediction.homeExpectedGoals, 0);
+  const unavailable = { status: 'insufficient_data', reason: 'Not enough regulation scores', probabilities: null };
+  const missing = await fetchRecentPerformance(1, undefined, async () => new Response(JSON.stringify({ ...base, prediction: unavailable })));
+  assert.equal(missing.prediction.probabilities, null);
+  assert.equal(missing.prediction.reason, unavailable.reason);
+});
