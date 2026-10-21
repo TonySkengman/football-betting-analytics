@@ -8,7 +8,7 @@ export function TeamBadge({ team, small = false }) {
   return (
     <span
       className={`team-badge ${small ? 'small' : ''}`}
-      style={{ '--team-color': team.color || '#38BDF8' }}
+      style={{ '--team-color': team.color || '#e6c6c0' }}
     >
       {showCrest ? (
         <img
@@ -28,5 +28,5 @@ export function SectionHeading({ eyebrow, title, action, onAction }) {
 }
 
 export function StatCard({ icon: Icon, label, value, detail, accent }) {
-  return <article className="panel p-5"><div className="flex items-center justify-between"><p className="text-sm text-slate-400">{label}</p><Icon size={18} className={accent ? 'text-[#38BDF8]' : 'text-slate-500'} /></div><p className="text-3xl font-semibold tracking-tight mt-5">{value}</p><p className="text-xs text-slate-500 mt-2">{detail}</p></article>;
+  return <article className="panel p-5"><div className="flex items-center justify-between"><p className="text-sm text-slate-300">{label}</p><Icon size={18} className={accent ? 'text-[#f4a1a4]' : 'text-slate-400'} /></div><p className="text-3xl font-semibold tracking-tight mt-5">{value}</p><p className="text-xs text-slate-400 mt-2">{detail}</p></article>;
 }

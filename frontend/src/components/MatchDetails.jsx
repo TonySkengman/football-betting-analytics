@@ -35,22 +35,22 @@ export default function MatchDetails({ id, standings }) {
           <section className="panel p-5 sm:p-8 mb-8" aria-label="Match summary">
             <div className="flex justify-center mb-7"><span className="league-tag">{formatStatus(match.status)}</span></div>
             <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 sm:gap-8">
-              <div className="match-team"><TeamBadge team={match.home} /><h2>{match.home.name}</h2><span className="text-slate-500 text-xs">Home</span></div>
-              <div className="text-center"><p className="text-3xl sm:text-5xl font-semibold tabular-nums">{formatScore(match.homeScore, match.awayScore)}</p><p className="text-xs text-slate-500 mt-3">Score</p></div>
-              <div className="match-team"><TeamBadge team={match.away} /><h2>{match.away.name}</h2><span className="text-slate-500 text-xs">Away</span></div>
+              <div className="match-team"><TeamBadge team={match.home} /><h2>{match.home.name}</h2><span className="text-slate-400 text-xs">Home</span></div>
+              <div className="text-center"><p className="text-3xl sm:text-5xl font-semibold tabular-nums">{formatScore(match.homeScore, match.awayScore)}</p><p className="text-xs text-slate-400 mt-3">Score</p></div>
+              <div className="match-team"><TeamBadge team={match.away} /><h2>{match.away.name}</h2><span className="text-slate-400 text-xs">Away</span></div>
             </div>
-            <div className="flex flex-wrap justify-center gap-5 mt-8 pt-5 border-t border-white/5 text-xs text-slate-400">
+            <div className="flex flex-wrap justify-center gap-5 mt-8 pt-5 border-t border-white/10 text-xs text-slate-300">
               <span className="flex gap-2 items-center"><CalendarDays size={14} />{match.date} · {match.time} UTC</span>
               {match.venue && <span className="flex gap-2 items-center"><MapPin size={14} />{match.venue}</span>}
               {match.matchday && <span>Matchday {match.matchday}</span>}
             </div>
-            {match.homeScore == null && match.awayScore == null && <p className="text-center text-xs text-slate-500 mt-4">A score has not been reported yet.</p>}
+            {match.homeScore == null && match.awayScore == null && <p className="text-center text-xs text-slate-400 mt-4">A score has not been reported yet.</p>}
           </section>
           <SectionHeading title="Match statistics" eyebrow="On the pitch" />
           {match.statistics.length ? (
             <div className="panel p-5 mb-8">
-              <div className="grid grid-cols-3 text-xs text-slate-500 pb-4"><span>{match.home.code}</span><span className="text-center">Statistic</span><span className="text-right">{match.away.code}</span></div>
-              {match.statistics.map(stat => <div key={stat.label} className="grid grid-cols-3 py-4 border-t border-white/5 text-sm"><span className="text-sky-300">{stat.home == null ? '—' : `${stat.home}${stat.unit}`}</span><span className="text-center text-slate-400">{stat.label}</span><span className="text-right text-sky-300">{stat.away == null ? '—' : `${stat.away}${stat.unit}`}</span></div>)}
+              <div className="grid grid-cols-3 text-xs text-slate-400 pb-4"><span>{match.home.code}</span><span className="text-center">Statistic</span><span className="text-right">{match.away.code}</span></div>
+              {match.statistics.map(stat => <div key={stat.label} className="grid grid-cols-3 py-4 border-t border-white/10 text-sm"><span className="text-red-300">{stat.home == null ? '—' : `${stat.home}${stat.unit}`}</span><span className="text-center text-slate-300">{stat.label}</span><span className="text-right text-red-300">{stat.away == null ? '—' : `${stat.away}${stat.unit}`}</span></div>)}
             </div>
           ) : <EmptyState message="Match statistics have not been supplied. Availability depends on kickoff time, coverage and API access." />}
           <RecentPerformance key={id} matchId={id} />
@@ -62,11 +62,11 @@ export default function MatchDetails({ id, standings }) {
             <div className="grid sm:grid-cols-2 gap-4">
               {[match.home, match.away].map(team => {
                 const row = standings.data.find(item => item.team.id === team.id);
-                return <article className="panel p-5" key={team.id}><h3 className="flex items-center gap-3 font-medium mb-5"><TeamBadge team={team} small />{team.name}</h3>{row ? <dl className="grid grid-cols-2 gap-4 text-sm">{[['Position', row.position], ['Points', row.points], ['Played', row.played], ['Goals scored', row.scored], ['Goals conceded', row.conceded], ['Goal difference', row.goalDifference]].map(([label, value]) => <div key={label}><dt className="text-xs text-slate-500 mb-1">{label}</dt><dd>{value}</dd></div>)}</dl> : <p className="text-sm text-slate-400">No current standings statistics available for this team.</p>}</article>;
+                return <article className="panel p-5" key={team.id}><h3 className="flex items-center gap-3 font-medium mb-5"><TeamBadge team={team} small />{team.name}</h3>{row ? <dl className="grid grid-cols-2 gap-4 text-sm">{[['Position', row.position], ['Points', row.points], ['Played', row.played], ['Goals scored', row.scored], ['Goals conceded', row.conceded], ['Goal difference', row.goalDifference]].map(([label, value]) => <div key={label}><dt className="text-xs text-slate-400 mb-1">{label}</dt><dd>{value}</dd></div>)}</dl> : <p className="text-sm text-slate-300">No current standings statistics available for this team.</p>}</article>;
               })}
             </div>
           )}
-          <p className="text-xs text-slate-500 mt-6">Source: football-data.org · No automatic live refresh</p>
+          <p className="text-xs text-slate-400 mt-6">Source: football-data.org · No automatic live refresh</p>
         </>
       )}
     </div>

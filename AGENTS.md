@@ -11,7 +11,7 @@
 - Use English for code, comments, user-facing text, documentation, and commit messages.
 - Use functional React components, PascalCase component files, and camelCase variables.
 - Use Java package `com.tonyle.footballbettinganalytics` and standard Java naming conventions.
-- Use Tailwind for styling and preserve the dark theme.
+- Use Tailwind for styling. Preserve the mobile-reference sports theme: charcoal backgrounds and panels, deep red headers, charcoal navigation, white text, and muted red accents.
 - Add comments only when they explain a non-obvious decision.
 
 ## Configuration and data
