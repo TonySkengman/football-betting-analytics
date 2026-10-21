@@ -1,34 +1,53 @@
 # Football Betting Analytics
 
-A fullstack portfolio project for football statistics and betting analysis.
-This first step contains project scaffolding only: no statistics, predictions,
-API endpoints, database entities, or external API requests are implemented.
-
-## Stack
-
-- Frontend: React, Vite, JavaScript, Tailwind CSS, Lucide React, Recharts.
-- Backend: Java 25, Spring Boot 4.1.1, Maven, Spring Data JPA, PostgreSQL driver.
-- Planned football data source: football-data.org.
+A React and Spring Boot portfolio application for Premier League football analytics.
+Matches and standings come from football-data.org API v4 through the backend.
+The chart and prediction cards still use clearly labeled fictional samples; no
+prediction model or odds integration has been implemented.
 
 ## Structure
 
-```text
-frontend/     React application and Vite configuration
-backend/      Spring Boot application and Maven configuration
-AGENTS.md     Project conventions for coding assistants
-```
+- `frontend/src/components/`: dashboard, cards, table, chart, and async states.
+- `frontend/src/services/footballApi.js`: HTTP requests and display adapters.
+- `frontend/src/hooks/useFootballData.js`: independent loading, error, and retry state.
+- `frontend/src/data/sampleData.js`: remaining chart and prediction demo data.
+- `backend/src/main/java/com/tonyle/footballbettinganalytics/football/`: RestClient
+  service, upstream response records, DTO mapper, controller, and safe API errors.
+- `backend/src/test/`: mapping and mocked upstream service tests.
+- `AGENTS.md`: project conventions.
 
 ## Requirements
 
 - Node.js 24 LTS and npm.
-- JDK 25.
-- Maven 3.6.3 or newer (or IntelliJ's bundled Maven).
-- Internet access for the first dependency installation.
-- PostgreSQL is only needed when using the optional database profile.
+- Java 25 and Maven 3.6.3+.
+- A football-data.org API key with Premier League access.
+- PostgreSQL is not required. Keep the default `setup` profile for this stage.
+
+## Start the backend
+
+Get your API token from https://www.football-data.org/ and set it in your backend
+terminal (or your IDE's run configuration):
+
+```sh
+cd backend
+export FOOTBALL_DATA_API_KEY='your-token-here'
+mvn spring-boot:run
+```
+
+Do not share your token or commit it. Spring Boot does not automatically load
+`.env` files. Never create a frontend `VITE_` variable for this token.
+
+If Maven is not on your PATH, replace `mvn` with IntelliJ's bundled Maven:
+
+```sh
+"/Applications/IntelliJ IDEA.app/Contents/plugins/maven/lib/maven3/bin/mvn" spring-boot:run
+```
+
+Backend: http://localhost:8080. No root page exists; `/` returns 404.
 
 ## Start the frontend
 
-From the project root:
+In another terminal, from the project root:
 
 ```sh
 cd frontend
@@ -36,96 +55,58 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:5173. The page is a minimal dark setup placeholder.
-Lucide React and Recharts are declared dependencies, reserved for future features.
-Vite forwards future `/api` requests to http://localhost:8080 during development.
-Production API routing will need configuration when deployment is added.
+Open http://localhost:5173. Vite proxies `/api` to http://localhost:8080, so no
+permissive CORS configuration is needed. Production hosting must route `/api` to
+the backend separately. Vite preview does not use the development proxy.
 
-## Start the backend
+## Endpoints and response contracts
 
-In a separate terminal, from the project root:
+- `GET /api/matches`: upcoming current-season Premier League fixtures with status
+  `SCHEDULED` or `TIMED`. The backend filters the provider's season response.
+  Returns `[{id, utcDate, status, matchday, home, away}]`.
+- `GET /api/standings`: current-season `TOTAL` league table.
+  Returns `[{position, team, played, points, scored, conceded, goalDifference, form}]`.
+- Team DTOs contain `{id, name, code, crest}`. Dates are ISO timestamps, displayed in UTC.
+- Empty results return `[]`. Missing form is displayed as unavailable, never invented.
+- Errors return `{ "message": "safe explanation" }` with HTTP 503 for missing or
+  rejected credentials, 429 for rate limits, 504 for network/timeouts, and 502 for
+  other provider errors or unreadable responses. Provider bodies are not exposed.
 
-```sh
-cd backend
-mvn spring-boot:run
-```
+Requests use `X-Auth-Token` only between the backend and football-data.org.
+Connection timeout is 5 seconds; response timeout is 15 seconds. There is no
+polling or automatic retry. Each page load requests matches and standings once
+(React Strict Mode may repeat initial requests in development). Manual retries
+request only the failed resource. Provider plan limits apply; avoid rapid refreshes.
+No API data is persisted and no database integration was added.
 
-If `mvn` is unavailable and IntelliJ IDEA is installed at the standard macOS path:
+The dashboard displays three upcoming matches, and Matches shows all upcoming
+season fixtures. Standings and matches load independently. Preview state controls
+remain available for inspecting UI states; select API data to return to real results.
 
-```sh
-"/Applications/IntelliJ IDEA.app/Contents/plugins/maven/lib/maven3/bin/mvn" spring-boot:run
-```
-
-The backend listens on http://localhost:8080. No endpoints have been implemented,
-so visiting `/` will return HTTP 404. Stop either process with Ctrl+C.
-
-The default `setup` profile disables database auto-configuration so that the empty
-application can start without PostgreSQL. JPA and the PostgreSQL driver are
-already declared in the Maven dependencies.
-
-## Optional PostgreSQL configuration
-
-When database work begins, create a PostgreSQL user and an empty database named
-`football_betting_analytics`, then run the following in the backend terminal:
+## Checks
 
 ```sh
-export DB_URL=jdbc:postgresql://localhost:5432/football_betting_analytics
-export DB_USERNAME=your_database_user
-export DB_PASSWORD=your_database_password
-mvn spring-boot:run -Dspring-boot.run.profiles=database
-```
-
-Use the same bundled Maven path above if Maven is not on your PATH. The database
-profile validates the schema and does not create or modify tables. No entities
-or schema migrations are included yet.
-
-For future API integration, set `FOOTBALL_DATA_API_KEY` in the backend environment.
-It is not needed for this setup. Never put the key in frontend code or a `VITE_`
-variable. Spring Boot does not automatically load `.env` files.
-
-## Build
-
-Run in `frontend/`:
-
-```sh
+cd frontend
+npm test
 npm run build
 ```
 
-Run in `backend/`:
-
 ```sh
+cd backend
 mvn verify
 ```
 
-The frontend output goes to `frontend/dist/`. The executable backend JAR goes
-to `backend/target/`. No tests are included yet because no behavior is implemented.
-Commit the generated `frontend/package-lock.json` after a successful installation.
+Frontend tests use Node's built-in test runner, with no extra dependencies.
+Backend tests use JUnit and Spring's mock HTTP server, with no real token or network.
 
-## Initial verification status
+Latest environment checks: frontend tests and production build passed. Backend
+main and test compilation succeeded using cached dependencies, but Maven test
+execution was blocked by the uncached Surefire JUnit platform provider and network
+DNS restrictions. A live authenticated football-data.org call has not been verified.
 
-Setup was attempted in a restricted environment:
-
-- `npm install` failed with `ENOTFOUND registry.npmjs.org`. Offline installation
-  also failed because required packages were not cached. No lockfile was generated.
-- The frontend build could not run because Vite was not installed.
-- Maven verification using IntelliJ's bundled Maven failed while resolving the
-  Spring Boot parent POM: `repo.maven.apache.org` could not be resolved.
-- `git init -b main .` was denied with `.git: Operation not permitted`.
-
-Neither build nor application startup has been verified. Retry installation and
-both builds from a normal terminal with network access. Dependency versions may
-need adjustment if the package registry reports compatibility errors.
+Official API reference: https://docs.football-data.org/general/v4/competition.html
 
 ## Git
 
-The setup environment prevented creation of the project repository. Before
-staging files, run this from the project root in your terminal:
-
-```sh
-git init -b main .
-git rev-parse --show-toplevel
-```
-
-The reported root must be this project's folder. Git previously detected an
-ancestor repository; do not stage files until this project has its own repository.
-No commits, pushes, or remote repositories have been created.
+Do not commit or push automatically. Build outputs, dependencies, and local secrets
+are ignored by `.gitignore`.
